@@ -1,5 +1,6 @@
 package com.example.centralcoordinator.Controller;
 
+import Configuration.ApplicationProperties;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
@@ -14,16 +15,26 @@ import java.util.List;
 
 @Service
 public class PaxosHandler {
-
-    private String hostname;
-    private List<Integer> nodePorts = new ArrayList<>(Arrays. asList(1001));
-    private List<String> nodeHostnames = new ArrayList<>(Arrays. asList("localhost"));
+    private List<Integer> nodePorts;
+    private List<String> nodeHostnames;
     private int port;
+    private String hostname;
     private Long currentProposal;
     private HttpServletRequest currentValue;
     private int numTrials;
 
+    public PaxosHandler(ApplicationProperties props) {
+        this.nodePorts = props.getNodePorts();
+        this.nodeHostnames = props.getNodeHostnames();
+        this.port = 8080;
+        this.hostname = "localhost";
+        this.currentProposal = 0L;
+        this.currentValue = null;
+        this.numTrials = 0;
+    }
+
     public ResponseEntity<Object> handleRequest(HttpServletRequest request) {
+        System.out.println(nodePorts);
 
         if (numTrials > 3) {
             numTrials = 0;
