@@ -2,16 +2,22 @@ package com.example.centralcoordinator.Controller;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.*;
+import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Date;
 import java.util.List;
 
+@Service
 public class PaxosHandler {
 
     private String hostname;
-    private List<Integer> nodePorts;
-    private List<String> nodeHostnames;
+    private List<Integer> nodePorts = new ArrayList<>(Arrays. asList(1001));
+    private List<String> nodeHostnames = new ArrayList<>(Arrays. asList("localhost"));
     private int port;
     private Long currentProposal;
     private HttpServletRequest currentValue;
@@ -25,32 +31,34 @@ public class PaxosHandler {
         }
 
         //TODO set to timestamp
-        currentProposal = System.currentTimeMillis();
+        String currentProposalString = new SimpleDateFormat("MMddHHmmssSSS").format(new Date());
+        currentProposal = Long.parseLong(currentProposalString);
 
 
         boolean isPrepared = sendPrepare(currentProposal);
+        return null;
 
-        if (!isPrepared) {
-            numTrials++;
-            return handleRequest(request);
-        }
-
-
-        if (currentValue == null) {
-            currentValue = request;
-        }
-
-        //paxos accept phase
-        boolean isAccepted = sendPropose(currentProposal, currentValue);
-
-        if (!isAccepted) {
-            numTrials++;
-            return handleRequest(request);
-        }
-
-
-        //consensus is reached
-        return consensusReached();
+//        if (!isPrepared) {
+//            numTrials++;
+//            return handleRequest(request);
+//        }
+//
+//
+//        if (currentValue == null) {
+//            currentValue = request;
+//        }
+//
+//        //paxos accept phase
+//        boolean isAccepted = sendPropose(currentProposal, currentValue);
+//
+//        if (!isAccepted) {
+//            numTrials++;
+//            return handleRequest(request);
+//        }
+//
+//
+//        //consensus is reached
+//        return consensusReached();
     }
 
     private ResponseEntity<Object> consensusReached() {
@@ -92,7 +100,7 @@ public class PaxosHandler {
             //create body with proposalId and value
 //            body = (1,2)
 //            request = wrap(body)
-//                    response = send(request + url)
+//            response = send(request + url)
 
              //= restTemplate.getForObject(url, ResponseEntity.class);
 
@@ -119,9 +127,10 @@ public class PaxosHandler {
             //send request to each node via HTTP
             RestTemplate restTemplate = new RestTemplate();
 
-            String url = "http://" + nodeHostnames.get(i) + ":" + nodePorts.get(i) + "/accept?proposalId=" + currentProposal;
+            String url = "http://" + nodeHostnames.get(i) + ":" + nodePorts.get(i) + "/prepare?proposalId=" + currentProposal;
+            System.out.println(url);
             ResponseEntity<Object> response = restTemplate.getForObject(url, ResponseEntity.class);
-
+            System.out.println(response);
             //TODO
 
 //            if (promise != null && promise.getPrepared()) {
