@@ -129,7 +129,7 @@ public class PaxosHandler {
         return true;
     }
 
-    private boolean sendPrepare(Long currentProposal) {
+    public boolean sendPrepare(Long currentProposal) {
         int numPrepared = 0;
         HttpServletRequest valueToSend = null;
 
@@ -140,17 +140,14 @@ public class PaxosHandler {
 
             String url = "http://" + nodeHostnames.get(i) + ":" + nodePorts.get(i) + "/prepare?proposalId=" + currentProposal;
             System.out.println(url);
-            ResponseEntity<Object> response = restTemplate.getForObject(url, ResponseEntity.class);
-            System.out.println(response);
-            //TODO
+            ResponseEntity<Object> response = passRequest(url, null);
+            // extracting response value
+            System.out.println(response.getBody());
+            // update numPrepared based on response
+            if (response.getStatusCode() == HttpStatus.OK) {
+                numPrepared++;
+            }
 
-//            if (promise != null && promise.getPrepared()) {
-//                numPrepared++;
-//            }
-//
-//            if (promise != null && promise.getAccepted()) {
-//                valueToSend = promise.getAcceptedValue();
-//            }
 
         }
 
@@ -164,4 +161,26 @@ public class PaxosHandler {
 
         return true;
     }
+
+    // paxosHandler.java
+
+    public ResponseEntity<Object> passRequest(String url, String requestBody){
+        // url must contain the endpoint with currentProposal, or whatever to hit
+        //send request to each node via HTTP
+        RestTemplate restTemplate = new RestTemplate();
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        HttpEntity<String> requestEntity;
+        if (requestBody != null) {
+            requestEntity = new HttpEntity<>(requestBody, headers);
+        } else {
+            requestEntity = new HttpEntity<>("", headers);
+        }
+
+//        String url = "http://localhost:1001/prepare?proposalId=" + currentProposal;
+        ResponseEntity<Object> response = restTemplate.exchange(url, HttpMethod.POST, requestEntity,  Object.class);
+        return response;
+    }
+
 }

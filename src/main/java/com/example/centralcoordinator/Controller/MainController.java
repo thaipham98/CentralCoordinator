@@ -15,26 +15,27 @@ public class MainController {
 
     private PaxosHandler paxosHandler;
 
-    @RequestMapping(method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT})
-    public ResponseEntity<Object> handleRequest(HttpServletRequest request) {
-        return paxosHandler.handleRequest(request);
-       //return processRequest(request, null);
+//    @RequestMapping(method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT})
+//    public ResponseEntity<Object> handleRequest(HttpServletRequest request) {
+//        return paxosHandler.handleRequest(request);
+//       //return processRequest(request, null);
+//    }
+
+    @RequestMapping(method = RequestMethod.GET)
+    public ResponseEntity<String> handleGetRequest(HttpServletRequest request){
+        boolean isPrepared = paxosHandler.sendPrepare(1L);
+        return processRequest(request, null);
     }
 
-//    @RequestMapping(method = RequestMethod.GET)
-//    public ResponseEntity<String> handleGetRequest(HttpServletRequest request){
-//        return processRequest(request, null);
-//    }
-//
-//    @RequestMapping(method = RequestMethod.POST)
-//    public ResponseEntity<String> handlePostRequest(HttpServletRequest request, @RequestBody String requestBody) {
-//        return processRequest(request, requestBody);
-//    }
-//
-//    @RequestMapping(method = RequestMethod.PUT) // value = "/**",
-//    public ResponseEntity<String> handlePutRequest(HttpServletRequest request, @RequestBody String requestBody){
-//        return processRequest(request, requestBody);
-//    }
+    @RequestMapping(method = RequestMethod.POST)
+    public ResponseEntity<String> handlePostRequest(HttpServletRequest request, @RequestBody String requestBody) {
+        return processRequest(request, requestBody);
+    }
+
+    @RequestMapping(method = RequestMethod.PUT) // value = "/**",
+    public ResponseEntity<String> handlePutRequest(HttpServletRequest request, @RequestBody String requestBody){
+        return processRequest(request, requestBody);
+    }
 
     private ResponseEntity<String> processRequest(HttpServletRequest request, String requestBody){
         // Get information about the request
