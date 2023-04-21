@@ -1,27 +1,33 @@
 #!/bin/bash
-
+#chmod +x start_application.sh
+ #./start_application.sh --appconfig.nodePorts=1001,1002,1003,1004,1005 --appconfig.nodeHostnames=localhost,localhost,localhost,localhost,localhost
 # Get the path of the current directory
 current_dir=$(pwd)
 
 # Get the port numbers from the command line arguments
 port_args=$(echo "$@" | grep -Eo '(--appconfig.nodePorts=)[0-9,]*' | cut -d= -f2)
 
+
 # Split the port numbers into an array
 IFS=',' read -ra node_ports <<< "$port_args"
 
+
 # Get the hostnames from the command line arguments
-hostname_args=$(echo "$@" | grep -Eo '(--appconfig.nodeHostnames=)[^,]*' | cut -d= -f2)
+hostname_args=$(echo "$@" | grep -Eo '(--appconfig.nodeHostnames=)[^ ]+' | cut -d= -f2)
+#echo "$hostname_args"
 
 # Split the hostnames into an array
 IFS=',' read -ra node_hostnames <<< "$hostname_args"
+
+#echo "${node_hostnames[@]}"
 
 # Loop through the array of port numbers
 for (( i=0; i<${#node_ports[@]}; i++ )); do
 
   # Generate the properties file for the current port number
-  properties_file="application-replica$((i+1)).properties"
+  properties_file="application-replica${i}.properties"
   echo "server.port=${node_ports[$i]}" > $properties_file
-  echo "spring.datasource.url=jdbc:mysql://${node_hostnames[$i]}:3306/store$((i+1))?createDatabaseIfNotExist=true" >> $properties_file
+  echo "spring.datasource.url=jdbc:mysql://${node_hostnames[$i]}:3306/store${i}?createDatabaseIfNotExist=true" >> $properties_file
   echo "spring.datasource.username=root" >> $properties_file
   echo "spring.datasource.password=gus101997" >> $properties_file
   echo "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQLDialect" >> $properties_file
