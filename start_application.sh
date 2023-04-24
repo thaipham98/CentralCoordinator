@@ -1,6 +1,6 @@
 #!/bin/bash
 
- #./start_application.sh --appconfig.nodePorts=1000,1001 --appconfig.nodeHostnames=localhost,localhost
+ #./start_application.sh --appconfig.nodePorts=1000,1001,1002 --appconfig.nodeHostnames=localhost,localhost,localhost
 # Get the path of the current directory
 current_dir=$(pwd)
 
@@ -26,7 +26,7 @@ MASTER_HOST=127.0.0.1
 REPL_USER="replication"
 REPL_PASS="password"
 CENTRAL_APP_PROPERTIES="application.properties"
-
+#
 ## Install MySQL dependencies
 #brew install cmake bison ncurses
 #
@@ -89,6 +89,7 @@ sleep 5
 
 mysqldump --all-databases --single-transaction --master-data > backup.sql
 # Create MySQL slave instances
+
 for (( i=0; i<${#node_ports[@]}; i++ ))
 do
     MYSQL_PORT=$((3307+$i))
@@ -115,9 +116,8 @@ do
 
 
     # Add Kafka properties to the properties file
-    topics="healthcheck-${node_hostnames[$i]}-${MYSQL_PORT}, $topics"
-    replicas="${node_hostnames[$i]}-${MYSQL_PORT}, $replicas"
-
+    topics+="health-check-${node_hostnames[$i]}-${MYSQL_PORT},"
+    replicas+="${node_hostnames[$i]}-${MYSQL_PORT},"
 
     # Generate the properties file for the current port number
     properties_file="application-replica${MYSQL_PORT}.properties"
@@ -148,9 +148,15 @@ do
     mysql -P$MYSQL_PORT -u root -e "SHOW SLAVE STATUS\G"
 done
 
-echo "healthcheck.topics=${topics::-1}" > $CENTRAL_APP_PROPERTIES
-echo "healthcheck.replicas=${replicas::-1}" >> $CENTRAL_APP_PROPERTIES
+
+topics="${topics%?}"
+replicas="${replicas%?}"
+echo "healthcheck.topics=${topics}" > $CENTRAL_APP_PROPERTIES
+echo "healthcheck.replicas=${replicas}" >> $CENTRAL_APP_PROPERTIES
 mv $CENTRAL_APP_PROPERTIES src/main/resources
+
+
+
 
 # Download and run the Kafka server
 #!/bin/bash
@@ -208,7 +214,7 @@ echo "Apache Kafka ${KAFKA_VERSION} has been downloaded and started"
 
 
 # Wait for the application to start
-sleep 20
+sleep 10
 
 # Start Spring Boot application at localhost:8080
 mvn spring-boot:run
