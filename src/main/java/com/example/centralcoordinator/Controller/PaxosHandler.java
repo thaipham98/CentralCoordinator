@@ -1,6 +1,7 @@
 package com.example.centralcoordinator.Controller;
 
 import Configuration.ApplicationProperties;
+import com.example.centralcoordinator.Resource.MyLogger;
 import com.example.centralcoordinator.model.ForwardRequestRepr;
 import com.example.centralcoordinator.model.PaxosResponse;
 import com.example.centralcoordinator.model.Promise;
@@ -27,6 +28,8 @@ public class PaxosHandler {
     private Long currentProposal;
     private ForwardRequestRepr mockCurrentValue; // current request to send with body for paxos
     private int numTrials;
+    // fo rlogging events
+    private MyLogger myLogger = MyLogger.getInstance();
 
     public PaxosHandler(ApplicationProperties props) {
         this.nodePorts = props.getNodePorts();
@@ -39,8 +42,6 @@ public class PaxosHandler {
     }
 
     public ResponseEntity<String> handleRequest(HttpServletRequest request, String requestBody) {
-        System.out.println(nodePorts);
-
         try {
             if (numTrials > 3) {
                 numTrials = 0;
@@ -64,7 +65,7 @@ public class PaxosHandler {
                 this.mockCurrentValue = new ForwardRequestRepr(request, requestBody);
             }
 
-            System.out.println("===== From paxos handler: Majority of replicas are prepared. Current proposal: " + currentProposal + "Proceed to accept phase");
+            myLogger.info("===== From paxos handler: Majority of replicas are prepared. Current proposal: " + currentProposal + "Proceed to accept phase");
 
             //paxos accept phase
             boolean isAccepted = sendPropose(currentProposal, this.mockCurrentValue);
@@ -75,11 +76,11 @@ public class PaxosHandler {
                 return ResponseEntity.status(500).body("The majority of server replicas are not accepted");
             }
 
-            System.out.println("===== From paxos handler: Majority of replicas are accepted. Current proposal: " + currentProposal + "Value acccepted:" + this.mockCurrentValue + "Proceed to decide phase");
+            myLogger.info("===== From paxos handler: Majority of replicas are accepted. Current proposal: " + currentProposal + "Value acccepted:" + this.mockCurrentValue + "Proceed to decide phase");
 
             //consensus is reached
             int numDecide = this.sendDecide();
-            System.out.println("===== From paxos handler: Consensus reached. numDecide = " + numDecide);
+            myLogger.info("===== From paxos handler: Consensus reached. numDecide = " + numDecide);
             ResponseEntity<String> response = consensusReached(this.mockCurrentValue);
             return response;
         } catch (Exception e) {
@@ -91,7 +92,7 @@ public class PaxosHandler {
 
     public ResponseEntity<String> consensusReached(ForwardRequestRepr mockCurrentValue) {
         // print the ccurrentValue
-        System.out.println("==== From paxos handler: consensusReached mockCurrentValue:" + mockCurrentValue);
+        myLogger.info("==== From paxos handler: consensusReached mockCurrentValue:" + mockCurrentValue);
         // route request to correct server controller, or server request
         ResponseEntity<String> result = null;
         HttpMethod method = HttpMethod.valueOf(mockCurrentValue.getMethod());
@@ -112,12 +113,12 @@ public class PaxosHandler {
             try{
                 ResponseEntity<String> serverResponse = restTemplate.exchange(forwardUrl, method, requestEntity, String.class);
                 // print the result
-                System.out.println("==== From paxos handler: From server " + i + "Response:\n" + serverResponse);
+                myLogger.info("==== From paxos handler: From server " + i + "Response:\n" + serverResponse);
                 result = serverResponse;
             } catch (ResourceAccessException e){
                 // server not available, just print message and skip
-                System.out.println("Error sending ACTUAL request to server " + this.nodeHostnames.get(i) + ":" + this.nodePorts.get(i));
-                System.out.println(e.getMessage());
+                myLogger.info("Error sending ACTUAL request to server " + this.nodeHostnames.get(i) + ":" + this.nodePorts.get(i));
+                myLogger.info(e.getMessage());
             } catch (HttpClientErrorException e){
                 // malformed request, return error. All server will response the same anyway
                 result = ResponseEntity
@@ -126,8 +127,8 @@ public class PaxosHandler {
                         .body(e.getResponseBodyAsString());
             } catch (Exception e){
                 // any other exception, return 500 error.
-                System.out.println("Error sending ACTUAL request to server: " + this.nodeHostnames.get(i) + ":" + this.nodePorts.get(i) + "\n" + e.getMessage());
-                System.out.println(e.getMessage());
+                myLogger.warning("Error sending ACTUAL request to server: " + this.nodeHostnames.get(i) + ":" + this.nodePorts.get(i) + "\n" + e.getMessage());
+                myLogger.warning(e.getMessage());
                 result = ResponseEntity.status(500).body(e.getMessage());
             }
         }
@@ -144,7 +145,7 @@ public class PaxosHandler {
         int numDecided = 0;
         for (int i = 0; i < nodePorts.size(); i++){
             decideUrl = "http://" + nodeHostnames.get(i) + ":" + nodePorts.get(i) + "/decide";
-            System.out.println("decideUrl:" + decideUrl);
+            myLogger.info("decideUrl:" + decideUrl);
             RestTemplate restTemplate = new RestTemplate();
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
@@ -156,24 +157,24 @@ public class PaxosHandler {
                     numDecided++;
                 }
             } catch (Exception e) {
-                System.out.println("Error sending decide request to server: " + this.nodeHostnames.get(i) + ":" + this.nodePorts.get(i) + "\n" + e.getMessage());
-                System.out.println(e.getMessage());
+                myLogger.info("Error sending decide request to server: " + this.nodeHostnames.get(i) + ":" + this.nodePorts.get(i) + "\n" + e.getMessage());
+                myLogger.info(e.getMessage());
             }
         }
         return numDecided;
     }
 
     public boolean sendPropose(Long currentProposal, ForwardRequestRepr mockCurrentValue) {
-        System.out.println("sendPropose with HTTP request:\n" + mockCurrentValue);
+        myLogger.info("sendPropose with HTTP request:\n" + mockCurrentValue);
         int numAccepted = 0;
         ForwardRequestRepr valueToSend = mockCurrentValue;
-        System.out.println("sendPropose with ForwardRequestRepr:\n" + valueToSend);
+        myLogger.info("sendPropose with ForwardRequestRepr:\n" + valueToSend);
         String acceptUrl;
 
         // send to accept endpoint of Paxos Controller on server. To make server replica aware of this request.
         for (int i = 0; i < nodePorts.size(); i++) {
             acceptUrl = "http://" + nodeHostnames.get(i) + ":" + nodePorts.get(i) + "/accept?proposalId=" + currentProposal;
-            System.out.println("acceptUrl:" + acceptUrl);
+            myLogger.info("acceptUrl:" + acceptUrl);
             RestTemplate restTemplate = new RestTemplate();
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
@@ -181,7 +182,7 @@ public class PaxosHandler {
             HttpEntity<ForwardRequestRepr> requestEntity = new HttpEntity<>(valueToSend, headers); // body and header
             try{
                 ResponseEntity<String> response = restTemplate.exchange(acceptUrl, HttpMethod.POST, requestEntity, String.class);
-                System.out.println("Received Paxos Response from server:");
+                myLogger.info("Received Paxos Response from server:");
                 // extracting response value
                 PaxosResponse paxosResponse = this.parsePaxosResponse(response);
                 if (paxosResponse != null) {
@@ -192,15 +193,15 @@ public class PaxosHandler {
                     }
                 }
             } catch (Exception e) {
-                System.out.println("Error sending propose request to server: " + this.nodeHostnames.get(i) + ":" + this.nodePorts.get(i) + "\n" + e.getMessage());
-                System.out.println(e.getMessage());
+                myLogger.warning("Error sending propose request to server: " + this.nodeHostnames.get(i) + ":" + this.nodePorts.get(i) + "\n" + e.getMessage());
+                myLogger.warning(e.getMessage());
             }
         }
 
         if (numAccepted <= nodePorts.size() / 2) {
             return false;
         }
-        System.out.println("==== From paxos handler: sendPropose numAccepted:" + numAccepted);
+        myLogger.info("==== From paxos handler: sendPropose numAccepted:" + numAccepted);
 
         return true;
     }
@@ -212,7 +213,7 @@ public class PaxosHandler {
 
         for (int i = 0; i < nodePorts.size(); i++) {
             prepareUrl = "http://" + nodeHostnames.get(i) + ":" + nodePorts.get(i) + "/prepare?proposalId=" + currentProposal;
-            System.out.println("prepareUrl:" + prepareUrl);
+            myLogger.info("prepareUrl:" + prepareUrl);
             // send to prepare endpoint of Paxos Controller on server
             RestTemplate restTemplate = new RestTemplate();
             HttpHeaders headers = new HttpHeaders();
@@ -237,13 +238,13 @@ public class PaxosHandler {
 
             } catch (Exception e){
                 // eg. server not available
-                System.out.println("Exception in sendPrepare to server: " + this.nodeHostnames.get(i) + ":" + this.nodePorts.get(i));
-                System.out.println(e.getMessage());
+                myLogger.warning("Exception in sendPrepare to server: " + this.nodeHostnames.get(i) + ":" + this.nodePorts.get(i));
+                myLogger.warning(e.getMessage());
             }
 
         }
 
-        System.out.println("===From sendPrepare: proposalId = " + currentProposal + " numPrepared: " + numPrepared + "===");
+        myLogger.info("===From sendPrepare: proposalId = " + currentProposal + " numPrepared: " + numPrepared + "===");
 
         if (numPrepared <= nodePorts.size() / 2) {
             return false;
@@ -260,7 +261,7 @@ public class PaxosHandler {
     private PaxosResponse parsePaxosResponse(ResponseEntity<String> response){
         // extract response value
         // print response received from paxos controller
-        System.out.println("Response received from paxos controller:" + response.getBody());
+        myLogger.info("Response received from paxos controller:" + response.getBody());
         try{
             if (response.getStatusCode() == HttpStatus.OK) {
                 //parse response body
@@ -271,22 +272,22 @@ public class PaxosHandler {
                 int status = responseObject.getStatus();
                 Promise data = responseObject.getData();
                 // print response objects
-                System.out.println("Parsed response body received from paxos controller:");
-                System.out.println("Message: " + message);
-                System.out.println("Status: " + status);
-                System.out.println("Data: " + data);
+                myLogger.info("Parsed response body received from paxos controller:");
+                myLogger.info("Message: " + message);
+                myLogger.info("Status: " + status);
+                myLogger.info("Data: " + data);
 
                 //do something with the parsed values
                 return responseObject;
             } else {
                 //handle error response
                 // TODO: change this by sth else than null
-                System.out.println("Error response: " + response.getStatusCode());
+                myLogger.warning("Error response: " + response.getStatusCode());
                 return null;
             }
         } catch (JacksonException e) {
             //handle error response
-            System.out.println("Error parsing response: " + e.getMessage());
+            myLogger.warning("Error parsing response: " + e.getMessage());
             return null;
         }
 
