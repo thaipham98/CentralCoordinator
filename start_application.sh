@@ -1,6 +1,6 @@
 #!/bin/bash
 
- #./test_script.sh --appconfig.nodePorts=1000,1001 --appconfig.nodeHostnames=localhost,localhost
+ #./start_application.sh --appconfig.nodePorts=1000,1001 --appconfig.nodeHostnames=localhost,localhost
 # Get the path of the current directory
 current_dir=$(pwd)
 
@@ -25,6 +25,7 @@ MASTER_PORT=11111
 MASTER_HOST=127.0.0.1
 REPL_USER="replication"
 REPL_PASS="password"
+CENTRAL_APP_PROPERTIES="application.properties"
 
 ## Install MySQL dependencies
 #brew install cmake bison ncurses
@@ -39,6 +40,7 @@ REPL_PASS="password"
 #cmake . -DCMAKE_INSTALL_PREFIX=$MYSQL_INSTALL_DIR -DDEFAULT_CHARSET=utf8mb4 -DDEFAULT_COLLATION=utf8mb4_general_ci
 #make
 #make install
+
 
 # Create master MySQL instance
 MASTER_DATA_DIR="/usr/local/var/mysql_master"
@@ -86,7 +88,6 @@ mysql -h$MASTER_HOST -P$MASTER_PORT -u root -e "FLUSH PRIVILEGES;"
 sleep 5
 
 mysqldump --all-databases --single-transaction --master-data > backup.sql
-
 # Create MySQL slave instances
 for (( i=0; i<${#node_ports[@]}; i++ ))
 do
@@ -113,6 +114,10 @@ do
     sudo $MYSQL_INSTALL_DIR/bin/mysqld_safe --defaults-file=$MYSQL_CONF_FILE --user=$MYSQL_USER --datadir=$MYSQL_DATA_DIR &
 
 
+    # Add Kafka properties to the properties file
+    topics="healthcheck-${node_hostnames[$i]}-${MYSQL_PORT}, $topics"
+    replicas="${node_hostnames[$i]}-${MYSQL_PORT}, $replicas"
+
 
     # Generate the properties file for the current port number
     properties_file="application-replica${MYSQL_PORT}.properties"
@@ -121,8 +126,9 @@ do
     echo "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQLDialect" >> $properties_file
     echo "spring.jpa.hibernate.ddl-auto=none" >> $properties_file
     echo "spring.sql.init.mode=always" >> $properties_file
-    echo "replica.id=replica-11111" >> $properties_file
-    echo "healthcheck.topic=healthcheck-replica-${MYSQL_PORT}" >> $properties_file
+    echo "replica.id=${node_hostnames[$i]}-${MYSQL_PORT}" >> $properties_file
+    echo "healthcheck.topic=health-check-${node_hostnames[$i]}-${MYSQL_PORT}" >> $properties_file
+    echo "replica.url=http://${node_hostnames[$i]}:${MYSQL_PORT}" >> $properties_file
     echo "spring.kafka.bootstrap-servers=localhost:9092" >> $properties_file
     echo "spring.kafka.producer.key-serializer=org.apache.kafka.common.serialization.StringSerializer" >> $properties_file
     echo "spring.kafka.producer.value-serializer=org.springframework.kafka.support.serializer.JsonSerializer" >> $properties_file
@@ -141,6 +147,65 @@ do
     mysql -P$MYSQL_PORT -u root -e "START SLAVE;"
     mysql -P$MYSQL_PORT -u root -e "SHOW SLAVE STATUS\G"
 done
+
+echo "healthcheck.topics=${topics::-1}" > $CENTRAL_APP_PROPERTIES
+echo "healthcheck.replicas=${replicas::-1}" >> $CENTRAL_APP_PROPERTIES
+mv $CENTRAL_APP_PROPERTIES src/main/resources
+
+# Download and run the Kafka server
+#!/bin/bash
+
+# Define Kafka version
+KAFKA_VERSION=3.4.0
+
+# Define download URL
+KAFKA_DOWNLOAD_URL=https://downloads.apache.org/kafka/${KAFKA_VERSION}/kafka_2.13-${KAFKA_VERSION}.tgz
+
+# Define installation directory
+KAFKA_INSTALL_DIR=/usr/local/kafka
+
+# Create installation directory if it doesn't exist
+if [ ! -d "${KAFKA_INSTALL_DIR}" ]; then
+  sudo mkdir -p ${KAFKA_INSTALL_DIR}
+fi
+
+## Download Kafka
+#sudo curl ${KAFKA_DOWNLOAD_URL} -o ${KAFKA_INSTALL_DIR}/kafka_${KAFKA_VERSION}.tgz
+#
+## Extract Kafka
+#sudo tar -xzf ${KAFKA_INSTALL_DIR}/kafka_${KAFKA_VERSION}.tgz -C ${KAFKA_INSTALL_DIR}
+#
+## Delete downloaded file
+#sudo rm ${KAFKA_INSTALL_DIR}/kafka_${KAFKA_VERSION}.tgz
+
+# Set environment variables
+export KAFKA_HOME=${KAFKA_INSTALL_DIR}
+export PATH="$PATH:$KAFKA_HOME"
+
+# Start ZooKeeper
+#osascript -e "tell app \"Terminal\"
+#  do script \"cd ${KAFKA_HOME} && bin/zookeeper-server-start.sh config/zookeeper.properties\"
+#end tell"
+
+osascript -e "tell app \"Terminal\"
+  do script \"${KAFKA_HOME}/bin/zookeeper-server-start.sh ${KAFKA_HOME}/config/zookeeper.properties\"
+
+end tell"
+
+sleep 10
+
+# Start Kafka
+#osascript -e "tell app \"Terminal\"
+#  do script \"cd ${KAFKA_HOME} && bin/kafka-server-start.sh config/server.properties\"
+#end tell"
+
+osascript -e "tell app \"Terminal\"
+  do script \"${KAFKA_HOME}/bin/kafka-server-start.sh ${KAFKA_HOME}/config/server.properties\"
+end tell"
+
+# Print success message
+echo "Apache Kafka ${KAFKA_VERSION} has been downloaded and started"
+
 
 # Wait for the application to start
 sleep 20

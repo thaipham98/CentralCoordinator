@@ -62,6 +62,14 @@ sleep 20
 mvn spring-boot:run
 
 
+appconfig.nodePorts=1001,1002,1003,1004,1005
+appconfig.nodeHostNames=localhost,localhost,localhost,localhost,localhost
+
+
+healthcheck.topics=health-check-localhost-1001,health-check-localhost-1002
+healthcheck.replicas=localhost-1001,localhost-1002
+
+
 
 
 
