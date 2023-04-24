@@ -121,6 +121,10 @@ do
     echo "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQLDialect" >> $properties_file
     echo "spring.jpa.hibernate.ddl-auto=none" >> $properties_file
     echo "spring.sql.init.mode=always" >> $properties_file
+    echo "healthcheck.topic=healthcheck-replica-${MYSQL_PORT}" >> $properties_file
+    echo "spring.kafka.bootstrap-servers=localhost:9092" >> $properties_file
+    echo "spring.kafka.producer.key-serializer=org.apache.kafka.common.serialization.StringSerializer" >> $properties_file
+    echo "spring.kafka.producer.value-serializer=org.springframework.kafka.support.serializer.JsonSerializer" >> $properties_file
 
     # Move the properties file to the target folder
     mv $properties_file ../backend-ecommerce/Ecommerce-back-end/src/main/resources
@@ -136,3 +140,9 @@ do
     mysql -P$MYSQL_PORT -u root -e "START SLAVE;"
     mysql -P$MYSQL_PORT -u root -e "SHOW SLAVE STATUS\G"
 done
+
+# Wait for the application to start
+sleep 20
+
+# Start Spring Boot application at localhost:8080
+mvn spring-boot:run
