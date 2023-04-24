@@ -12,6 +12,8 @@ public class ForwardRequestRepr {
     String contentType;
     @JsonProperty("url")
     String url;
+    @JsonProperty("requestURI")
+    String requestURI;
     @JsonProperty("queryString")
     String queryString;
     @JsonProperty("pathInfo")
@@ -21,12 +23,15 @@ public class ForwardRequestRepr {
 
     public ForwardRequestRepr(){};
 
+
+
     public ForwardRequestRepr(HttpServletRequest forwardRequest, String forwardRequestBody) {
         // print values of the forward request
         // mapping from HttpServletRequest to ForwardRequestRepr
         this.method = forwardRequest.getMethod();
         this.contentType = forwardRequest.getContentType();
         this.url = forwardRequest.getRequestURL().toString();
+        this.requestURI = forwardRequest.getRequestURI();
         this.queryString = forwardRequest.getQueryString();
         this.pathInfo = forwardRequest.getPathInfo();
         this.body = forwardRequestBody;
@@ -47,12 +52,12 @@ public class ForwardRequestRepr {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         ForwardRequestRepr that = (ForwardRequestRepr) o;
-        return Objects.equals(method, that.method) && Objects.equals(url, that.url) && Objects.equals(queryString, that.queryString) && Objects.equals(pathInfo, that.pathInfo) && Objects.equals(body, that.body);
+        return Objects.equals(method, that.method) && Objects.equals(contentType, that.contentType) && Objects.equals(url, that.url) && Objects.equals(requestURI, that.requestURI) && Objects.equals(queryString, that.queryString) && Objects.equals(pathInfo, that.pathInfo) && Objects.equals(body, that.body);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(method, contentType, url, queryString, pathInfo, body);
+        return Objects.hash(method, contentType, url, requestURI, queryString, pathInfo, body);
     }
 
     @Override
@@ -61,10 +66,19 @@ public class ForwardRequestRepr {
                 "method='" + method + '\'' +
                 ", contentType='" + contentType + '\'' +
                 ", url='" + url + '\'' +
+                ", requestURI='" + requestURI + '\'' +
                 ", queryString='" + queryString + '\'' +
                 ", pathInfo='" + pathInfo + '\'' +
                 ", body='" + body + '\'' +
                 '}';
+    }
+
+    public void setRequestURI(String requestURI) {
+        this.requestURI = requestURI;
+    }
+
+    public String getRequestURI() {
+        return requestURI;
     }
 
     public String getMethod() {

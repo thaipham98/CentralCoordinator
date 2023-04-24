@@ -9,6 +9,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
 import java.io.IOException;
@@ -23,7 +25,7 @@ public class PaxosHandler {
     private int port;
     private String hostname;
     private Long currentProposal;
-    private HttpServletRequest currentValue; // forwardRequestRepr ?
+    private ForwardRequestRepr mockCurrentValue; // current request to send with body for paxos
     private int numTrials;
 
     public PaxosHandler(ApplicationProperties props) {
@@ -32,59 +34,69 @@ public class PaxosHandler {
         this.port = 8080;
         this.hostname = "localhost";
         this.currentProposal = 0L;
-        this.currentValue = null;
+        this.mockCurrentValue = null;
         this.numTrials = 0;
     }
 
-    public ResponseEntity<Object> handleRequest(HttpServletRequest request) {
+    public ResponseEntity<String> handleRequest(HttpServletRequest request, String requestBody) {
         System.out.println(nodePorts);
 
-        if (numTrials > 3) {
-            numTrials = 0;
-            return ResponseEntity.status(500).body("Server Error");
+        try {
+            if (numTrials > 3) {
+                numTrials = 0;
+                return ResponseEntity.status(500).body("Server Error");
+            }
+
+            //TODO set to timestamp
+            String currentProposalString = new SimpleDateFormat("MMddHHmmssSSS").format(new Date());
+            currentProposal = Long.parseLong(currentProposalString);
+
+
+            boolean isPrepared = sendPrepare(currentProposal);
+
+            if (!isPrepared) {
+//            numTrials++;
+//            return handleRequest(request, requestBody);
+                return ResponseEntity.status(500).body("The majority of server replicas are not prepared");
+            }
+
+            if (this.mockCurrentValue == null) {
+                this.mockCurrentValue = new ForwardRequestRepr(request, requestBody);
+            }
+
+            System.out.println("===== From paxos handler: Majority of replicas are prepared. Current proposal: " + currentProposal + "Proceed to accept phase");
+
+            //paxos accept phase
+            boolean isAccepted = sendPropose(currentProposal, this.mockCurrentValue);
+
+            if (!isAccepted) {
+//            numTrials++;
+//            return handleRequest(request, requestBody);
+                return ResponseEntity.status(500).body("The majority of server replicas are not accepted");
+            }
+
+            System.out.println("===== From paxos handler: Majority of replicas are accepted. Current proposal: " + currentProposal + "Value acccepted:" + this.mockCurrentValue + "Proceed to decide phase");
+
+            //consensus is reached
+            int numDecide = this.sendDecide();
+            System.out.println("===== From paxos handler: Consensus reached. numDecide = " + numDecide);
+            ResponseEntity<String> response = consensusReached(this.mockCurrentValue);
+            return response;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).body("Server Error " + e.getMessage());
         }
-
-        //TODO set to timestamp
-        String currentProposalString = new SimpleDateFormat("MMddHHmmssSSS").format(new Date());
-        currentProposal = Long.parseLong(currentProposalString);
-
-
-        boolean isPrepared = sendPrepare(currentProposal);
-        return null;
-
-//        if (!isPrepared) {
-//            numTrials++;
-//            return handleRequest(request);
-//        }
-//
-//
-//        if (currentValue == null) {
-//            currentValue = request;
-//        }
-//
-//        //paxos accept phase
-//        boolean isAccepted = sendPropose(currentProposal, currentValue);
-//
-//        if (!isAccepted) {
-//            numTrials++;
-//            return handleRequest(request);
-//        }
-//
-//
-//        //consensus is reached
-//        return consensusReached();
     }
 
 
-    public ResponseEntity<String> consensusReached(HttpServletRequest currentValue, String body) {
+    public ResponseEntity<String> consensusReached(ForwardRequestRepr mockCurrentValue) {
         // print the ccurrentValue
-        System.out.println("==== From paxos handler: consensusReached currentValue:");
-        HttpRequestToString(currentValue, null );
+        System.out.println("==== From paxos handler: consensusReached mockCurrentValue:" + mockCurrentValue);
         // route request to correct server controller, or server request
         ResponseEntity<String> result = null;
-        HttpMethod method = HttpMethod.valueOf(currentValue.getMethod());
-        String path = currentValue.getRequestURI();
-        String queryString = currentValue.getQueryString();
+        HttpMethod method = HttpMethod.valueOf(mockCurrentValue.getMethod());
+        String path = mockCurrentValue.getRequestURI();
+        String queryString = mockCurrentValue.getQueryString();
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -96,26 +108,65 @@ public class PaxosHandler {
             String forwardUrl = base_url + path + "?" + queryString;
 
             RestTemplate restTemplate = new RestTemplate();
-            HttpEntity<Object> requestEntity = null;
-            // TODO: change the body to custom object or String
-            requestEntity = new HttpEntity<>(body, headers); // body, headers
-            ResponseEntity<String> serverResponse = restTemplate.exchange(forwardUrl, method, requestEntity, String.class);
-            // print the result
-            System.out.println("==== From paxos handler: From server " + i + "Response:\n" + serverResponse);
-            if (serverResponse.getStatusCode() == HttpStatus.OK) {
+            HttpEntity<Object> requestEntity = new HttpEntity<>(mockCurrentValue.getBody(), headers); // body, headers
+            try{
+                ResponseEntity<String> serverResponse = restTemplate.exchange(forwardUrl, method, requestEntity, String.class);
+                // print the result
+                System.out.println("==== From paxos handler: From server " + i + "Response:\n" + serverResponse);
                 result = serverResponse;
+            } catch (ResourceAccessException e){
+                // server not available, just print message and skip
+                System.out.println("Error sending ACTUAL request to server " + this.nodeHostnames.get(i) + ":" + this.nodePorts.get(i));
+                System.out.println(e.getMessage());
+            } catch (HttpClientErrorException e){
+                // malformed request, return error. All server will response the same anyway
+                result = ResponseEntity
+                        .status(e.getStatusCode())
+                        .headers(e.getResponseHeaders())
+                        .body(e.getResponseBodyAsString());
+            } catch (Exception e){
+                // any other exception, return 500 error.
+                System.out.println("Error sending ACTUAL request to server: " + this.nodeHostnames.get(i) + ":" + this.nodePorts.get(i) + "\n" + e.getMessage());
+                System.out.println(e.getMessage());
+                result = ResponseEntity.status(500).body(e.getMessage());
             }
         }
 
-        currentValue = null;
-        numTrials = 0;
+        this.mockCurrentValue = null;
+        this.numTrials = 0;
         return result; //ResponseEntity.status(200).body("Consensus Reached");
     }
 
-    public boolean sendPropose(Long currentProposal, HttpServletRequest currentValue, String forwardRequestBody) {
-        System.out.println("sendPropose with HTTP request:\n" + HttpRequestToString(currentValue, null));
+    public int sendDecide(){
+        // assume once accept succeeds, decide succeeds
+        // send decide to all nodes
+        String decideUrl;
+        int numDecided = 0;
+        for (int i = 0; i < nodePorts.size(); i++){
+            decideUrl = "http://" + nodeHostnames.get(i) + ":" + nodePorts.get(i) + "/decide";
+            System.out.println("decideUrl:" + decideUrl);
+            RestTemplate restTemplate = new RestTemplate();
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            //create request body
+            HttpEntity<ForwardRequestRepr> requestEntity = new HttpEntity<>(null, headers); // body and header
+            try {
+                ResponseEntity<String> response = restTemplate.exchange(decideUrl, HttpMethod.POST, requestEntity, String.class);
+                if (response.getStatusCode().equals(HttpStatus.OK)){
+                    numDecided++;
+                }
+            } catch (Exception e) {
+                System.out.println("Error sending decide request to server: " + this.nodeHostnames.get(i) + ":" + this.nodePorts.get(i) + "\n" + e.getMessage());
+                System.out.println(e.getMessage());
+            }
+        }
+        return numDecided;
+    }
+
+    public boolean sendPropose(Long currentProposal, ForwardRequestRepr mockCurrentValue) {
+        System.out.println("sendPropose with HTTP request:\n" + mockCurrentValue);
         int numAccepted = 0;
-        ForwardRequestRepr valueToSend = new ForwardRequestRepr(currentValue, forwardRequestBody);
+        ForwardRequestRepr valueToSend = mockCurrentValue;
         System.out.println("sendPropose with ForwardRequestRepr:\n" + valueToSend);
         String acceptUrl;
 
@@ -128,16 +179,21 @@ public class PaxosHandler {
             headers.setContentType(MediaType.APPLICATION_JSON);
             //create request body
             HttpEntity<ForwardRequestRepr> requestEntity = new HttpEntity<>(valueToSend, headers); // body and header
-            ResponseEntity<String> response = restTemplate.exchange(acceptUrl, HttpMethod.POST, requestEntity, String.class);
-
-            // extracting response value
-            PaxosResponse paxosResponse = this.parsePaxosResponse(response);
-            if (paxosResponse != null) {
-                // extract promise from response
-                Promise promise = paxosResponse.getData();
-                if (promise != null && promise.isAccepted()) {
-                    numAccepted++;
+            try{
+                ResponseEntity<String> response = restTemplate.exchange(acceptUrl, HttpMethod.POST, requestEntity, String.class);
+                System.out.println("Received Paxos Response from server:");
+                // extracting response value
+                PaxosResponse paxosResponse = this.parsePaxosResponse(response);
+                if (paxosResponse != null) {
+                    // extract promise from response
+                    Promise promise = paxosResponse.getData();
+                    if (promise != null && promise.isAccepted()) {
+                        numAccepted++;
+                    }
                 }
+            } catch (Exception e) {
+                System.out.println("Error sending propose request to server: " + this.nodeHostnames.get(i) + ":" + this.nodePorts.get(i) + "\n" + e.getMessage());
+                System.out.println(e.getMessage());
             }
         }
 
@@ -151,7 +207,7 @@ public class PaxosHandler {
 
     public boolean sendPrepare(Long currentProposal) {
         int numPrepared = 0;
-        HttpServletRequest valueToSend = null;
+        ForwardRequestRepr valueToSend = null;
         String prepareUrl;
 
         for (int i = 0; i < nodePorts.size(); i++) {
@@ -162,22 +218,29 @@ public class PaxosHandler {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             //create request body
-            HttpEntity<HttpServletRequest> requestEntity = new HttpEntity<>(null, headers); // body and header
-            ResponseEntity<String> response = restTemplate.exchange(prepareUrl, HttpMethod.POST, requestEntity, String.class);
+            HttpEntity<ForwardRequestRepr> requestEntity = new HttpEntity<>(null, headers); // in prepare phase, we dont send value
 
-            // extracting response value
-            PaxosResponse paxosResponse = this.parsePaxosResponse(response);
-            if (paxosResponse != null) {
-                // extract promise from response
-                Promise promise = paxosResponse.getData();
-                if (promise != null && promise.isPrepared()) {
-                    numPrepared++;
+            try{
+                ResponseEntity<String> response = restTemplate.exchange(prepareUrl, HttpMethod.POST, requestEntity, String.class);
+                // extracting response value
+                PaxosResponse paxosResponse = this.parsePaxosResponse(response);
+                if (paxosResponse != null) {
+                    // extract promise from response
+                    Promise promise = paxosResponse.getData();
+                    if (promise != null && promise.isPrepared()) {
+                        numPrepared++;
+                    }
+                    if (promise != null && promise.getAcceptedValue() != null) {
+                        valueToSend = promise.getAcceptedValue();
+                    }
                 }
-                // TODO: re-write this to map received json to ForwardRequestRepr
-//                if (promise != null && promise.getAcceptedValueHttpServletRequest() != null) {
-//                    valueToSend = promise.getAcceptedValueHttpServletRequest();
-//                }
+
+            } catch (Exception e){
+                // eg. server not available
+                System.out.println("Exception in sendPrepare to server: " + this.nodeHostnames.get(i) + ":" + this.nodePorts.get(i));
+                System.out.println(e.getMessage());
             }
+
         }
 
         System.out.println("===From sendPrepare: proposalId = " + currentProposal + " numPrepared: " + numPrepared + "===");
@@ -187,31 +250,17 @@ public class PaxosHandler {
         }
 
         if (valueToSend != null) {
-            currentValue = valueToSend;
+            mockCurrentValue = valueToSend;
         }
 
         return true;
     }
     // =========== Helper functions to pass request to other nodes and parse Response ===========
 
-    public ResponseEntity<String> passRequest(String urlToSend, HttpServletRequest request){
-        // url must contain the endpoint with currentProposal, or whatever to hit
-        //send request to each node via HTTP
-        RestTemplate restTemplate = new RestTemplate();
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        //create request body
-        HttpEntity<HttpServletRequest> requestEntity = new HttpEntity<>(request, headers);
-        ResponseEntity<String> response = restTemplate.exchange(urlToSend, HttpMethod.POST, requestEntity, String.class);
-
-        return response;
-    }
-
     private PaxosResponse parsePaxosResponse(ResponseEntity<String> response){
         // extract response value
-        // update numPrepared based on response
-        // if response is not OK, return false
-        // if response is OK, return true
+        // print response received from paxos controller
+        System.out.println("Response received from paxos controller:" + response.getBody());
         try{
             if (response.getStatusCode() == HttpStatus.OK) {
                 //parse response body
@@ -222,6 +271,7 @@ public class PaxosHandler {
                 int status = responseObject.getStatus();
                 Promise data = responseObject.getData();
                 // print response objects
+                System.out.println("Parsed response body received from paxos controller:");
                 System.out.println("Message: " + message);
                 System.out.println("Status: " + status);
                 System.out.println("Data: " + data);
@@ -241,33 +291,4 @@ public class PaxosHandler {
         }
 
     }
-
-    private String HttpRequestToString(HttpServletRequest request, String requestBody) {
-        // Get information about the request
-        String method = request.getMethod();
-        String contentType = request.getContentType();
-        String userAgent = request.getHeader("User-Agent");
-        String url = request.getRequestURL().toString();
-        String queryString = request.getQueryString();
-        String pathInfo = request.getPathInfo();
-
-        // Construct the response
-        StringBuilder responseBuilder = new StringBuilder();
-        responseBuilder.append("Method: " + method + "\n");
-        responseBuilder.append("Content-Type: " + contentType + "\n");
-        responseBuilder.append("User-Agent: " + userAgent + "\n");
-        responseBuilder.append("URL: " + url + "\n");
-
-        if (queryString != null) {
-            responseBuilder.append("Query string: " + queryString + "\n");
-        }
-        if (pathInfo != null) {
-            responseBuilder.append("Path info: " + pathInfo + "\n");
-        }
-        if (request != null){
-            responseBuilder.append("Request body: " + requestBody + "\n");
-        }
-        return responseBuilder.toString();
-    }
-
 }
