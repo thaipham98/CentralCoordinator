@@ -121,6 +121,7 @@ do
     echo "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQLDialect" >> $properties_file
     echo "spring.jpa.hibernate.ddl-auto=none" >> $properties_file
     echo "spring.sql.init.mode=always" >> $properties_file
+    echo "replica.id=replica-11111" >> $properties_file
     echo "healthcheck.topic=healthcheck-replica-${MYSQL_PORT}" >> $properties_file
     echo "spring.kafka.bootstrap-servers=localhost:9092" >> $properties_file
     echo "spring.kafka.producer.key-serializer=org.apache.kafka.common.serialization.StringSerializer" >> $properties_file
