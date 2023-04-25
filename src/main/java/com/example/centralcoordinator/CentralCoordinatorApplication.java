@@ -11,9 +11,9 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @SpringBootApplication
 @RestController
-//@EnableKafka
+@EnableKafka
 @EnableConfigurationProperties(ApplicationProperties.class)
-//@EnableScheduling
+@EnableScheduling
 public class CentralCoordinatorApplication implements WebMvcConfigurer {
 
     public static void main(String[] args) {

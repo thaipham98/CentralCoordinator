@@ -22,7 +22,7 @@ MYSQL_GROUP="mysql"
 MYSQL_INSTALL_DIR="/usr/local/mysql"
 SERVER_ID=1
 MASTER_PORT=11111
-MASTER_HOST=127.0.0.1
+MASTER_HOST=localhost
 REPL_USER="replication"
 REPL_PASS="password"
 
@@ -71,6 +71,8 @@ sudo $MYSQL_INSTALL_DIR/bin/mysqld_safe --defaults-file=$MASTER_CONF_FILE --user
 
 echo "Created Master Database"
 
+sleep 15
+
 # Generate the properties file for the current port number
 properties_file="application-replica11111.properties"
 echo "server.port=9999" > $properties_file
@@ -86,14 +88,14 @@ echo "Running Master server"
 osascript -e "tell app \"Terminal\"
     do script \"cd '${current_dir}/../backend-ecommerce/Ecommerce-back-end' && mvn spring-boot:run -Dspring-boot.run.profiles=replica11111\"
 end tell"
-sleep 10
+sleep 15
 
 ## Create replication user on master
 #mysql -h$MASTER_HOST -P$MASTER_PORT -u root -e "CREATE USER '$REPL_USER'@'%' IDENTIFIED WITH mysql_native_password BY '$REPL_PASS';"
 #mysql -h$MASTER_HOST -P$MASTER_PORT -u root -e "GRANT REPLICATION SLAVE ON *.* TO '$REPL_USER'@'%';"
 #mysql -h$MASTER_HOST -P$MASTER_PORT -u root -e "FLUSH PRIVILEGES;"
 
-sleep 5
+
 
 
 # Create MySQL slave instances
@@ -138,12 +140,12 @@ do
     echo "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQLDialect" >> $properties_file
     echo "spring.jpa.hibernate.ddl-auto=none" >> $properties_file
     echo "spring.sql.init.mode=always" >> $properties_file
-#    echo "replica.id=${node_hostnames[$i]}-${MYSQL_PORT}" >> $properties_file
-#    echo "healthcheck.topic=health-check-${node_hostnames[$i]}-${MYSQL_PORT}" >> $properties_file
-#    echo "replica.url=http://${node_hostnames[$i]}:${MYSQL_PORT}" >> $properties_file
-#    echo "spring.kafka.bootstrap-servers=localhost:9092" >> $properties_file
-#    echo "spring.kafka.producer.key-serializer=org.apache.kafka.common.serialization.StringSerializer" >> $properties_file
-#    echo "spring.kafka.producer.value-serializer=org.springframework.kafka.support.serializer.JsonSerializer" >> $properties_file
+    echo "replica.id=${node_hostnames[$i]}-${node_ports[$i]}" >> $properties_file
+    echo "healthcheck.topic=health-check-${node_hostnames[$i]}-${node_ports[$i]}" >> $properties_file
+    echo "replica.url=http://${node_hostnames[$i]}:${node_ports[$i]}" >> $properties_file
+    echo "spring.kafka.bootstrap-servers=localhost:9092" >> $properties_file
+    echo "spring.kafka.producer.key-serializer=org.apache.kafka.common.serialization.StringSerializer" >> $properties_file
+    echo "spring.kafka.producer.value-serializer=org.springframework.kafka.support.serializer.JsonSerializer" >> $properties_file
 
     # Move the properties file to the target folder
     mv $properties_file ../backend-ecommerce/Ecommerce-back-end/src/main/resources
@@ -151,6 +153,8 @@ do
     osascript -e "tell app \"Terminal\"
         do script \"cd '${current_dir}/../backend-ecommerce/Ecommerce-back-end' && mvn spring-boot:run -Dspring-boot.run.profiles=replica${MYSQL_PORT}\"
     end tell"
+
+    sleep 15
 
 #    # Start the slave MySQL instances
 #    mysql -P$MYSQL_PORT -u root -e "STOP SLAVE;"
@@ -200,34 +204,35 @@ fi
 # Set environment variables
 export KAFKA_HOME=${KAFKA_INSTALL_DIR}
 export PATH="$PATH:$KAFKA_HOME"
-
+#
 # Start ZooKeeper
 #osascript -e "tell app \"Terminal\"
 #  do script \"cd ${KAFKA_HOME} && bin/zookeeper-server-start.sh config/zookeeper.properties\"
 #end tell"
 
-#osascript -e "tell app \"Terminal\"
-#  do script \"${KAFKA_HOME}/bin/zookeeper-server-start.sh ${KAFKA_HOME}/config/zookeeper.properties\"
-#
-#end tell"
-#
-#sleep 10
+
+osascript -e "tell app \"Terminal\"
+  do script \"${KAFKA_HOME}/bin/zookeeper-server-start.sh ${KAFKA_HOME}/config/zookeeper.properties\"
+
+end tell"
+
+sleep 15
 
 # Start Kafka
 #osascript -e "tell app \"Terminal\"
 #  do script \"cd ${KAFKA_HOME} && bin/kafka-server-start.sh config/server.properties\"
 #end tell"
 #
-#osascript -e "tell app \"Terminal\"
-#  do script \"${KAFKA_HOME}/bin/kafka-server-start.sh ${KAFKA_HOME}/config/server.properties\"
-#end tell"
-#
-## Print success message
-#echo "Apache Kafka ${KAFKA_VERSION} has been downloaded and started"
+osascript -e "tell app \"Terminal\"
+  do script \"${KAFKA_HOME}/bin/kafka-server-start.sh ${KAFKA_HOME}/config/server.properties\"
+end tell"
+
+# Print success message
+echo "Apache Kafka ${KAFKA_VERSION} has been downloaded and started"
 
 
 # Wait for the application to start
-sleep 10
+sleep 15
 
 # Start Spring Boot application at localhost:8080
 mvn spring-boot:run
