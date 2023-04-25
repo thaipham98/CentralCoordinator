@@ -69,6 +69,7 @@ echo "server-id=999" >> $MASTER_CONF_FILE
 # Start the master MySQL server with custom configuration file
 sudo $MYSQL_INSTALL_DIR/bin/mysqld_safe --defaults-file=$MASTER_CONF_FILE --user=$MYSQL_USER --datadir=$MASTER_DATA_DIR &
 
+echo "Created Master Database"
 
 # Generate the properties file for the current port number
 properties_file="application-replica11111.properties"
@@ -81,20 +82,22 @@ echo "spring.sql.init.mode=always" >> $properties_file
 # Move the properties file to the target folder
 mv $properties_file ../backend-ecommerce/Ecommerce-back-end/src/main/resources
 # Start a new terminal window
+echo "Running Master server"
 osascript -e "tell app \"Terminal\"
     do script \"cd '${current_dir}/../backend-ecommerce/Ecommerce-back-end' && mvn spring-boot:run -Dspring-boot.run.profiles=replica11111\"
 end tell"
 sleep 10
 
-# Create replication user on master
-mysql -h$MASTER_HOST -P$MASTER_PORT -u root -e "CREATE USER '$REPL_USER'@'%' IDENTIFIED WITH mysql_native_password BY '$REPL_PASS';"
-mysql -h$MASTER_HOST -P$MASTER_PORT -u root -e "GRANT REPLICATION SLAVE ON *.* TO '$REPL_USER'@'%';"
-mysql -h$MASTER_HOST -P$MASTER_PORT -u root -e "FLUSH PRIVILEGES;"
+## Create replication user on master
+#mysql -h$MASTER_HOST -P$MASTER_PORT -u root -e "CREATE USER '$REPL_USER'@'%' IDENTIFIED WITH mysql_native_password BY '$REPL_PASS';"
+#mysql -h$MASTER_HOST -P$MASTER_PORT -u root -e "GRANT REPLICATION SLAVE ON *.* TO '$REPL_USER'@'%';"
+#mysql -h$MASTER_HOST -P$MASTER_PORT -u root -e "FLUSH PRIVILEGES;"
 
 sleep 5
 
 
 # Create MySQL slave instances
+echo "Running replicas ..."
 
 for (( i=0; i<${#node_ports[@]}; i++ ))
 do
