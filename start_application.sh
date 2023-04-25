@@ -141,11 +141,11 @@ do
     end tell"
 
     # Start the slave MySQL instances
-    mysql -P$MYSQL_PORT < backup.sql
-    mysql -P$MYSQL_PORT -u root -e "STOP SLAVE;"
-    mysql -P$MYSQL_PORT -u root -e "CHANGE MASTER TO MASTER_HOST='$MASTER_HOST', MASTER_PORT=$MASTER_PORT, MASTER_USER='$REPL_USER', MASTER_PASSWORD='$REPL_PASS';"
-    mysql -P$MYSQL_PORT -u root -e "START SLAVE;"
-    mysql -P$MYSQL_PORT -u root -e "SHOW SLAVE STATUS\G"
+    mysql -h$MASTER_HOST -P$MYSQL_PORT < backup.sql
+    mysql -h$MASTER_HOST -P$MYSQL_PORT -u root -e "STOP SLAVE;"
+    mysql -h$MASTER_HOST -P$MYSQL_PORT -u root -e "CHANGE MASTER TO MASTER_HOST='$MASTER_HOST', MASTER_PORT=$MASTER_PORT, MASTER_USER='$REPL_USER', MASTER_PASSWORD='$REPL_PASS';"
+    mysql -h$MASTER_HOST -P$MYSQL_PORT -u root -e "START SLAVE;"
+    mysql -h$MASTER_HOST -P$MYSQL_PORT -u root -e "SHOW SLAVE STATUS\G"
 done
 
 

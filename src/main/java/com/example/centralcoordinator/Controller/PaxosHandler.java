@@ -42,6 +42,8 @@ public class PaxosHandler {
     }
 
     public ResponseEntity<String> handleRequest(HttpServletRequest request, String requestBody) {
+        System.out.print("Paxos handler: send to ports: " + this.nodePorts);
+//        this.nodePorts.forEach(System.out::print);
         try {
             if (numTrials > 3) {
                 numTrials = 0;
