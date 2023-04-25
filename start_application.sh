@@ -25,7 +25,13 @@ MASTER_PORT=11111
 MASTER_HOST=127.0.0.1
 REPL_USER="replication"
 REPL_PASS="password"
+
+if [ -f src/main/resources/application.properties ]; then
+  rm src/main/resources/application.properties
+fi
+
 CENTRAL_APP_PROPERTIES="application.properties"
+
 #
 ## Install MySQL dependencies
 #brew install cmake bison ncurses
@@ -87,7 +93,7 @@ mysql -h$MASTER_HOST -P$MASTER_PORT -u root -e "FLUSH PRIVILEGES;"
 
 sleep 5
 
-mysqldump --all-databases --single-transaction --master-data > backup.sql
+
 # Create MySQL slave instances
 
 for (( i=0; i<${#node_ports[@]}; i++ ))
@@ -115,9 +121,12 @@ do
     sudo $MYSQL_INSTALL_DIR/bin/mysqld_safe --defaults-file=$MYSQL_CONF_FILE --user=$MYSQL_USER --datadir=$MYSQL_DATA_DIR &
 
 
+    # Add node ports and local host names to the properties file
+    nodePorts+="${node_ports[$i]},"
+    nodeHostNames+="${node_hostnames[$i]},"
     # Add Kafka properties to the properties file
-    topics+="health-check-${node_hostnames[$i]}-${MYSQL_PORT},"
-    replicas+="${node_hostnames[$i]}-${MYSQL_PORT},"
+    topics+="health-check-${node_hostnames[$i]}-${node_ports[$i]},"
+    replicas+="${node_hostnames[$i]}-${node_ports[$i]},"
 
     # Generate the properties file for the current port number
     properties_file="application-replica${MYSQL_PORT}.properties"
@@ -126,12 +135,12 @@ do
     echo "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQLDialect" >> $properties_file
     echo "spring.jpa.hibernate.ddl-auto=none" >> $properties_file
     echo "spring.sql.init.mode=always" >> $properties_file
-    echo "replica.id=${node_hostnames[$i]}-${MYSQL_PORT}" >> $properties_file
-    echo "healthcheck.topic=health-check-${node_hostnames[$i]}-${MYSQL_PORT}" >> $properties_file
-    echo "replica.url=http://${node_hostnames[$i]}:${MYSQL_PORT}" >> $properties_file
-    echo "spring.kafka.bootstrap-servers=localhost:9092" >> $properties_file
-    echo "spring.kafka.producer.key-serializer=org.apache.kafka.common.serialization.StringSerializer" >> $properties_file
-    echo "spring.kafka.producer.value-serializer=org.springframework.kafka.support.serializer.JsonSerializer" >> $properties_file
+#    echo "replica.id=${node_hostnames[$i]}-${MYSQL_PORT}" >> $properties_file
+#    echo "healthcheck.topic=health-check-${node_hostnames[$i]}-${MYSQL_PORT}" >> $properties_file
+#    echo "replica.url=http://${node_hostnames[$i]}:${MYSQL_PORT}" >> $properties_file
+#    echo "spring.kafka.bootstrap-servers=localhost:9092" >> $properties_file
+#    echo "spring.kafka.producer.key-serializer=org.apache.kafka.common.serialization.StringSerializer" >> $properties_file
+#    echo "spring.kafka.producer.value-serializer=org.springframework.kafka.support.serializer.JsonSerializer" >> $properties_file
 
     # Move the properties file to the target folder
     mv $properties_file ../backend-ecommerce/Ecommerce-back-end/src/main/resources
@@ -140,18 +149,20 @@ do
         do script \"cd '${current_dir}/../backend-ecommerce/Ecommerce-back-end' && mvn spring-boot:run -Dspring-boot.run.profiles=replica${MYSQL_PORT}\"
     end tell"
 
-    # Start the slave MySQL instances
-    mysql -h$MASTER_HOST -P$MYSQL_PORT < backup.sql
-    mysql -h$MASTER_HOST -P$MYSQL_PORT -u root -e "STOP SLAVE;"
-    mysql -h$MASTER_HOST -P$MYSQL_PORT -u root -e "CHANGE MASTER TO MASTER_HOST='$MASTER_HOST', MASTER_PORT=$MASTER_PORT, MASTER_USER='$REPL_USER', MASTER_PASSWORD='$REPL_PASS';"
-    mysql -h$MASTER_HOST -P$MYSQL_PORT -u root -e "START SLAVE;"
-    mysql -h$MASTER_HOST -P$MYSQL_PORT -u root -e "SHOW SLAVE STATUS\G"
+#    # Start the slave MySQL instances
+#    mysql -P$MYSQL_PORT -u root -e "STOP SLAVE;"
+#    mysql -P$MYSQL_PORT -u root -e "CHANGE MASTER TO MASTER_HOST='$MASTER_HOST', MASTER_PORT=$MASTER_PORT, MASTER_USER='$REPL_USER', MASTER_PASSWORD='$REPL_PASS';"
+#    mysql -P$MYSQL_PORT -u root -e "START SLAVE;"
 done
 
 
+nodePorts="${nodePorts%?}"
+nodeHostNames="${nodeHostNames%?}"
 topics="${topics%?}"
 replicas="${replicas%?}"
-echo "healthcheck.topics=${topics}" > $CENTRAL_APP_PROPERTIES
+echo "appconfig.nodePorts=${nodePorts}" > $CENTRAL_APP_PROPERTIES
+echo "appconfig.nodeHostNames=${nodeHostNames}" >> $CENTRAL_APP_PROPERTIES
+echo "healthcheck.topics=${topics}" >> $CENTRAL_APP_PROPERTIES
 echo "healthcheck.replicas=${replicas}" >> $CENTRAL_APP_PROPERTIES
 mv $CENTRAL_APP_PROPERTIES src/main/resources
 
@@ -159,7 +170,6 @@ mv $CENTRAL_APP_PROPERTIES src/main/resources
 
 
 # Download and run the Kafka server
-#!/bin/bash
 
 # Define Kafka version
 KAFKA_VERSION=3.4.0
@@ -193,24 +203,24 @@ export PATH="$PATH:$KAFKA_HOME"
 #  do script \"cd ${KAFKA_HOME} && bin/zookeeper-server-start.sh config/zookeeper.properties\"
 #end tell"
 
-osascript -e "tell app \"Terminal\"
-  do script \"${KAFKA_HOME}/bin/zookeeper-server-start.sh ${KAFKA_HOME}/config/zookeeper.properties\"
-
-end tell"
-
-sleep 10
+#osascript -e "tell app \"Terminal\"
+#  do script \"${KAFKA_HOME}/bin/zookeeper-server-start.sh ${KAFKA_HOME}/config/zookeeper.properties\"
+#
+#end tell"
+#
+#sleep 10
 
 # Start Kafka
 #osascript -e "tell app \"Terminal\"
 #  do script \"cd ${KAFKA_HOME} && bin/kafka-server-start.sh config/server.properties\"
 #end tell"
-
-osascript -e "tell app \"Terminal\"
-  do script \"${KAFKA_HOME}/bin/kafka-server-start.sh ${KAFKA_HOME}/config/server.properties\"
-end tell"
-
-# Print success message
-echo "Apache Kafka ${KAFKA_VERSION} has been downloaded and started"
+#
+#osascript -e "tell app \"Terminal\"
+#  do script \"${KAFKA_HOME}/bin/kafka-server-start.sh ${KAFKA_HOME}/config/server.properties\"
+#end tell"
+#
+## Print success message
+#echo "Apache Kafka ${KAFKA_VERSION} has been downloaded and started"
 
 
 # Wait for the application to start
