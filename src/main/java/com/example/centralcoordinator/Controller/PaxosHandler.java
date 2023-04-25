@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class PaxosHandler {
@@ -96,6 +97,16 @@ public class PaxosHandler {
     public ResponseEntity<String> consensusReached(ForwardRequestRepr mockCurrentValue) {
         // print the ccurrentValue
         myLogger.info("==== From paxos handler: consensusReached mockCurrentValue:" + mockCurrentValue);
+
+        // temporarily add backup node to nodePort and locahost
+        Integer backupNodePort = 9999;
+        String backupHostName = "localhost";
+        List<Integer> nodePortsWithBackup = nodePorts.stream().collect(Collectors.toList());
+        nodePortsWithBackup.add(backupNodePort);
+        List<String> hostnamesWithBackup = nodeHostnames.stream().collect(Collectors.toList());
+        hostnamesWithBackup.add(backupHostName);
+        System.out.println("Send request to all servers: nodesWithBackup = " + nodePortsWithBackup);
+
         // route request to correct server controller, or server request
         ResponseEntity<String> result = null;
         HttpMethod method = HttpMethod.valueOf(mockCurrentValue.getMethod());
@@ -105,9 +116,9 @@ public class PaxosHandler {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
 
-        for (int i = 0; i < nodePorts.size(); i++) {
+        for (int i = 0; i < nodePortsWithBackup.size(); i++) {
             //send request to each node via HTTP
-            String base_url = "http://" + nodeHostnames.get(i) + ":" + nodePorts.get(i);
+            String base_url = "http://" + hostnamesWithBackup.get(i) + ":" + nodePortsWithBackup.get(i);
 
             String forwardUrl = base_url + path + "?" + queryString;
 
@@ -120,7 +131,7 @@ public class PaxosHandler {
                 result = serverResponse;
             } catch (ResourceAccessException e){
                 // server not available, just print message and skip
-                myLogger.info("Error sending ACTUAL request to server " + this.nodeHostnames.get(i) + ":" + this.nodePorts.get(i));
+                myLogger.info("Error sending ACTUAL request to server " + hostnamesWithBackup.get(i) + ":" + nodePortsWithBackup.get(i));
                 myLogger.info(e.getMessage());
             } catch (HttpClientErrorException e){
                 // malformed request, return error. All server will response the same anyway
@@ -130,7 +141,7 @@ public class PaxosHandler {
                         .body(e.getResponseBodyAsString());
             } catch (Exception e){
                 // any other exception, return 500 error.
-                myLogger.warning("Error sending ACTUAL request to server: " + this.nodeHostnames.get(i) + ":" + this.nodePorts.get(i) + "\n" + e.getMessage());
+                myLogger.warning("Error sending ACTUAL request to server: " + hostnamesWithBackup.get(i) + ":" + nodePortsWithBackup.get(i) + "\n" + e.getMessage());
                 myLogger.warning(e.getMessage());
                 result = ResponseEntity.status(500).body(e.getMessage());
             }

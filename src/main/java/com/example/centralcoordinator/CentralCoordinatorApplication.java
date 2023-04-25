@@ -17,6 +17,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class CentralCoordinatorApplication implements WebMvcConfigurer {
 
     public static void main(String[] args) {
+        System.out.println(args);
         SpringApplication.run(CentralCoordinatorApplication.class, args);
     }
 }
