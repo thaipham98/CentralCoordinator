@@ -216,7 +216,7 @@ osascript -e "tell app \"Terminal\"
 
 end tell"
 
-sleep 15
+sleep 30
 
 # Start Kafka
 #osascript -e "tell app \"Terminal\"
